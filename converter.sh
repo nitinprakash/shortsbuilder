@@ -2,11 +2,13 @@
 
 VERSION="1.0.0"
 AUTHOR="Nitin Prakash"
+EMAIL="nitinwebsiteexpert@gmail.com"
 
 clear
 echo "======================================================="
 echo "        ShortsBuilder CLI - Converter v$VERSION"
 echo "        Author: $AUTHOR"
+echo "        Support: $EMAIL"
 echo "======================================================="
 echo ""
 

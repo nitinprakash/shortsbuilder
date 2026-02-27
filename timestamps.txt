@@ -1,13 +1,2 @@
-29:04 30:28|jamvant_vs_krishna
-31:45 32:16|bhautik_vs_adhyatmik_gyan
-41:00 41:40|basic_qualification_to_understand_bhagwad_bita
-43:13 43:50|how_to_understand_bhagwad_gita
-44:41 45:31|divya_gyan_hriday_prakashito
-47:08 47:22|sewa_service_turns_knowledge_into_realization
-53:15 54:12|shiva_tatva
-56:30 57:01|bhagwan_aur_bhakt_ke_bich_ka_tatva
-1:20:06 1:20:45|what_is_the_most_important_thing_in_bhakti
-1:22:08 1:22:28|hey_krishna_mai_apka_hu
-1:24:03 1:25:33
-1:29:14 1:29:58|jeevan_jeene_ke_2_tarike
-1:30:07 1:30:50|krishna_ki_shakti
+00:29:05 00:30:28|Sample1
+00:49:05 00:55:28|Sample2

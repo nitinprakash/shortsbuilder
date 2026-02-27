@@ -1,7 +1,7 @@
 # 🎬 ShortsBuilder CLI
 
 **Version:** 1.0.0  
-**Author:** NeeB Plugins  
+**Author:** Nitin Prakash  
 **License:** MIT  
 
 ShortsBuilder CLI is a professional yet simple command-line tool that helps you:
@@ -34,8 +34,8 @@ Designed for creators, educators, and content repurposers.
 | OS | Status |
 |----|--------|
 | Linux | Fully Tested |
-| Windows (Git Bash / WSL) | Tested |
-| macOS | Supported |
+| Windows (Git Bash / WSL) | Untested |
+| macOS | Untested |
 
 ---
 

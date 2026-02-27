@@ -2,16 +2,18 @@
 
 VERSION="1.0.0"
 AUTHOR="Nitin Prakash"
+EMAIL="nitinwebsiteexpert@gmail.com"
 
 clear
 echo "======================================================="
 echo "        ShortsBuilder CLI - Splitter v$VERSION"
 echo "        Author: $AUTHOR"
+echo "        Support: $EMAIL"
 echo "======================================================="
 echo ""
 
 ############################################
-# FFMPEG DETECTION
+# FFMPEG DETECTION (UNCHANGED)
 ############################################
 
 detect_os() {
@@ -64,7 +66,7 @@ ffmpeg -version | head -n 1
 echo ""
 
 ############################################
-# USER INPUT
+# USER INPUT (UNCHANGED)
 ############################################
 
 read -p "Enter input video file [default: input.mp4]: " input
@@ -88,13 +90,27 @@ fi
 
 mkdir -p "$output_dir"
 
+############################################
+# COUNT TOTAL SEGMENTS (NEW)
+############################################
+
+total_segments=$(grep -cve '^\s*$' "$timestamps")
+current_segment=0
+total_time=0
+
 echo ""
 echo "Starting split process..."
+echo "Total Segments: $total_segments"
 echo ""
+
+############################################
+# SPLIT LOOP (LOGIC UNCHANGED)
+############################################
 
 while IFS= read -r line || [[ -n "$line" ]]; do
 
     [[ -z "$line" ]] && continue
+    ((current_segment++))
 
     IFS='|' read -r timepart title <<< "$line"
     read -r start end <<< "$timepart"
@@ -103,7 +119,21 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     safe_title=$(echo "$title" | tr -cd '[:alnum:] _-' | tr ' ' '_')
     output="$output_dir/$safe_title.mp4"
 
-    echo "▶ Splitting: $safe_title"
+    percent=$((current_segment * 100 / total_segments))
+
+    # ETA calculation
+    if [[ $current_segment -gt 1 ]]; then
+        avg=$((total_time / (current_segment - 1)))
+        remaining=$(( (total_segments - current_segment + 1) * avg ))
+        eta_display="$((remaining/60))m $((remaining%60))s"
+    else
+        eta_display="Calculating..."
+    fi
+
+    echo "▶ [$current_segment/$total_segments] ($percent%) Splitting: $safe_title"
+    echo "   Estimated Remaining: $eta_display"
+
+    start_time=$(date +%s)
 
     ffmpeg -nostdin -y -loglevel error \
         -i "$input" \
@@ -114,10 +144,17 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         -movflags +faststart \
         "$output" > /dev/null 2>&1
 
-    echo "✔ Done"
+    end_time=$(date +%s)
+    elapsed=$((end_time - start_time))
+    total_time=$((total_time + elapsed))
+
+    echo "✔ Completed in ${elapsed}s"
+    echo ""
 
 done < "$timestamps"
 
-echo ""
+echo "======================================================="
 echo "Splitting completed."
+echo "Total Time: $((total_time/60))m $((total_time%60))s"
 echo "Output saved in: $output_dir"
+echo "======================================================="

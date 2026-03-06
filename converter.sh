@@ -1,25 +1,19 @@
 #!/bin/bash
 
-VERSION="1.0.0"
+VERSION="1.0.1"
 AUTHOR="Nitin Prakash"
-EMAIL="nitinwebsiteexpert@gmail.com"
 
 clear
 echo "======================================================="
 echo "        ShortsBuilder CLI - Converter v$VERSION"
-echo "        Author: $AUTHOR"
-echo "        Support: $EMAIL"
 echo "======================================================="
-echo ""
 
 ############################################
-# FFMPEG DETECTION
+# FFMPEG CHECK
 ############################################
 
-if ! command -v ffmpeg &> /dev/null; then
-    echo "❌ FFmpeg not installed."
-    echo "Install using:"
-    echo "sudo apt install ffmpeg"
+if ! command -v ffmpeg &> /dev/null || ! command -v ffprobe &> /dev/null; then
+    echo "❌ FFmpeg not installed"
     exit 1
 fi
 
@@ -27,10 +21,10 @@ echo "✓ FFmpeg detected"
 echo ""
 
 ############################################
-# SOURCE INPUT
+# INPUT SOURCE
 ############################################
 
-read -p "Enter video file OR folder path: " source
+read -p "Enter video file or folder path: " source
 
 if [[ ! -e "$source" ]]; then
     echo "❌ Path not found"
@@ -42,12 +36,12 @@ fi
 ############################################
 
 echo ""
-echo "Choose Output Format:"
-echo "1) 3GP (Default)"
+echo "Output Format:"
+echo "1) 3GP"
 echo "2) MP4"
 echo "3) MKV"
 
-read -p "Select option [1-3]: " format_choice
+read -p "Select [1-3, default:1]: " format_choice
 format_choice=${format_choice:-1}
 
 case $format_choice in
@@ -57,43 +51,51 @@ case $format_choice in
 esac
 
 ############################################
-# PERFORMANCE PRESET
+# PERFORMANCE
 ############################################
 
 echo ""
-echo "Choose Performance Preset:"
-echo "1) Fast (Recommended)"
+echo "Performance:"
+echo "1) Fast"
 echo "2) Balanced"
 echo "3) High Quality"
 
-read -p "Select option [1-3]: " perf
+read -p "Select [1-3]: " perf
 perf=${perf:-1}
 
 case $perf in
-2)
-preset="medium"
-crf="22"
-;;
-3)
-preset="slow"
-crf="18"
-;;
-*)
-preset="veryfast"
-crf="24"
-;;
+2) preset="medium"; crf="22";;
+3) preset="slow"; crf="18";;
+*) preset="veryfast"; crf="26";;
+esac
+
+############################################
+# FILE SIZE PRESET
+############################################
+
+echo ""
+echo "File Size:"
+echo "1) Large Quality"
+echo "2) Medium"
+echo "3) Small"
+
+read -p "Select [1-3]: " size_mode
+size_mode=${size_mode:-1}
+
+case $size_mode in
+2) crf=$((crf+2));;
+3) crf=$((crf+4));;
 esac
 
 ############################################
 # SHORTS MODE
 ############################################
 
-echo ""
-read -p "Convert to YouTube Shorts? (y/n): " shorts
+read -p "Convert to Shorts? (y/n): " shorts
 shorts=${shorts:-n}
 
 ############################################
-# CENTERING OPTIONS
+# CENTER SHIFT
 ############################################
 
 shift_x="(iw-1080)/2"
@@ -101,72 +103,41 @@ shift_x="(iw-1080)/2"
 if [[ "$shorts" == "y" ]]; then
 
 echo ""
-echo "Horizontal Centering Options:"
-echo "1) Center (Default)"
-echo "2) Shift Left"
-echo "3) Shift Right"
-echo "4) Custom Percentage"
+echo "Centering:"
+echo "1) Center"
+echo "2) Left"
+echo "3) Right"
+echo "4) Custom"
 
-read -p "Choose option [1-4]: " center
+read -p "Select [1-4]: " center
 center=${center:-1}
 
 case $center in
-2)
-shift_x="(iw*0.15)"
-;;
-3)
-shift_x="(iw*0.35)"
-;;
+2) shift_x="(iw*0.15)" ;;
+3) shift_x="(iw*0.35)" ;;
 4)
-read -p "Enter horizontal shift percent (0-100): " percent
+read -p "Enter shift percent (0-100): " percent
 shift_x="(iw*0.$percent)"
-;;
-*)
-shift_x="(iw-1080)/2"
 ;;
 esac
 
 fi
 
 ############################################
-# RESOLUTION
-############################################
-
-echo ""
-echo "Resolution Presets:"
-echo "1) 1080x1920 (YouTube Shorts)"
-echo "2) 720x1280"
-echo "3) Keep Original"
-
-read -p "Choose option [1-3]: " res
-res=${res:-1}
-
-case $res in
-2)
-scale="scale=720:1280"
-;;
-3)
-scale="scale=iw:ih"
-;;
-*)
-scale="scale=1080:1920"
-;;
-esac
-
-############################################
-# FILE COLLECTION
+# COLLECT FILES
 ############################################
 
 if [[ -d "$source" ]]; then
-    files=("$source"/*.{mp4,mkv,mov,avi})
-    base_dir="$source"
+files=$(find "$source" -type f \( -iname "*.mp4" -o -iname "*.mov" -o -iname "*.mkv" -o -iname "*.avi" \) \
+-not -path "*/shorts/*" -not -path "*/converted/*")
+base_dir="$source"
 else
-    files=("$source")
-    base_dir=$(dirname "$source")
+files="$source"
+base_dir=$(dirname "$source")
 fi
 
 ############################################
-# OUTPUT DIRECTORY
+# OUTPUT DIR
 ############################################
 
 if [[ "$shorts" == "y" ]]; then
@@ -178,16 +149,28 @@ fi
 mkdir -p "$output_dir"
 
 ############################################
-# PROCESS FILES
+# SAFE NVENC DETECTION
 ############################################
 
+if ffmpeg -hide_banner -f lavfi -i nullsrc -c:v h264_nvenc -f null - 2>/dev/null; then
+encoder="nvenc"
+echo "✓ NVENC GPU encoder active"
+else
+encoder="cpu"
+echo "✓ NVENC not usable, using CPU encoder"
+fi
+
+############################################
+# PROCESS LOOP
+############################################
+
+total=$(echo "$files" | wc -l)
 count=0
 
-for file in "${files[@]}"
+for file in $files
 do
 
 [[ ! -f "$file" ]] && continue
-
 ((count++))
 
 filename=$(basename "$file")
@@ -200,36 +183,84 @@ output="$output_dir/${name}.${format}"
 fi
 
 echo ""
-echo "[$count] ▶ Processing: $filename"
+echo "[$count/$total] ▶ Processing: $filename"
 
-if [[ "$shorts" == "y" ]]; then
+############################################
+# VALIDATE INPUT FILE
+############################################
 
-filter="crop=1080:1920:${shift_x}:0,$scale"
+if ! ffprobe "$file" &>/dev/null; then
+echo "⚠ Skipping corrupted file"
+continue
+fi
 
-ffmpeg -loglevel error \
+if [[ -f "$output" ]]; then
+echo "✓ Skipping existing"
+continue
+fi
+
+############################################
+# DETECT ORIENTATION
+############################################
+
+dimensions=$(ffprobe -v error -select_streams v:0 \
+-show_entries stream=width,height \
+-of csv=p=0 "$file")
+
+width=$(echo $dimensions | cut -d',' -f1)
+height=$(echo $dimensions | cut -d',' -f2)
+
+############################################
+# FILTER
+############################################
+
+if [[ "$shorts" == "y" && $height -lt $width ]]; then
+filter="crop=1080:1920:${shift_x}:0"
+else
+filter="scale=iw:ih"
+fi
+
+############################################
+# ENCODE
+############################################
+
+if [[ "$encoder" == "nvenc" ]]; then
+
+ffmpeg -threads 0 -loglevel error \
 -i "$file" \
 -vf "$filter" \
--c:v libx264 -preset $preset -crf $crf \
+-c:v h264_nvenc -preset p4 -cq $crf \
 -c:a aac -b:a 160k \
+-movflags +faststart \
 "$output"
 
 else
 
-ffmpeg -loglevel error \
+ffmpeg -threads 0 -loglevel error \
 -i "$file" \
+-vf "$filter" \
 -c:v libx264 -preset $preset -crf $crf \
 -c:a aac -b:a 160k \
+-movflags +faststart \
 "$output"
 
 fi
 
+############################################
+# VERIFY OUTPUT
+############################################
+
+if [[ $? -eq 0 ]]; then
 echo "✓ Completed"
+else
+echo "❌ Conversion failed"
+rm -f "$output"
+fi
 
 done
 
 echo ""
 echo "=================================="
-echo "All files processed."
-echo "Output saved to:"
-echo "$output_dir"
-echo ""
+echo "Conversion completed"
+echo "Output directory: $output_dir"
+echo "=================================="

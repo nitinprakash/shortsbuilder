@@ -16,140 +16,220 @@ echo ""
 # FFMPEG DETECTION
 ############################################
 
-detect_os() {
-    case "$(uname -s)" in
-        Linux*)     OS="Linux" ;;
-        Darwin*)    OS="macOS" ;;
-        CYGWIN*|MINGW*|MSYS*) OS="Windows" ;;
-        *)          OS="Unknown" ;;
-    esac
-}
-
-show_install_instructions() {
-    echo ""
-    echo "FFmpeg is not installed."
-    echo "Please install FFmpeg before using ShortsBuilder CLI."
-    echo ""
-
-    detect_os
-
-    case "$OS" in
-        Linux)
-            echo "Ubuntu/Debian:"
-            echo "  sudo apt update"
-            echo "  sudo apt install ffmpeg"
-            ;;
-        macOS)
-            echo "Install via Homebrew:"
-            echo "  brew install ffmpeg"
-            ;;
-        Windows)
-            echo "Windows Installation:"
-            echo "1. Download from: https://www.gyan.dev/ffmpeg/builds/"
-            echo "2. Extract ZIP"
-            echo "3. Add the 'bin' folder to System PATH"
-            ;;
-        *)
-            echo "Visit: https://ffmpeg.org/download.html"
-            ;;
-    esac
-
+if ! command -v ffmpeg &> /dev/null; then
+    echo "❌ FFmpeg not installed."
+    echo "Install using:"
+    echo "sudo apt install ffmpeg"
     exit 1
-}
-
-if ! command -v ffmpeg &> /dev/null || ! command -v ffprobe &> /dev/null; then
-    show_install_instructions
 fi
 
-echo "FFmpeg detected:"
-ffmpeg -version | head -n 1
+echo "✓ FFmpeg detected"
 echo ""
 
 ############################################
-# USER INPUT
+# SOURCE INPUT
 ############################################
 
 read -p "Enter video file OR folder path: " source
-[[ ! -e "$source" ]] && echo "❌ Path not found." && exit 1
+
+if [[ ! -e "$source" ]]; then
+    echo "❌ Path not found"
+    exit 1
+fi
+
+############################################
+# FORMAT
+############################################
 
 echo ""
 echo "Choose Output Format:"
-echo "1. 3GP (Default)"
-echo "2. MP4"
-echo "3. MKV"
-read -p "Select option [1-3, default: 1]: " format_choice
+echo "1) 3GP (Default)"
+echo "2) MP4"
+echo "3) MKV"
+
+read -p "Select option [1-3]: " format_choice
 format_choice=${format_choice:-1}
 
 case $format_choice in
-    2) format="mp4" ;;
-    3) format="mkv" ;;
-    *) format="3gp" ;;
+2) format="mp4" ;;
+3) format="mkv" ;;
+*) format="3gp" ;;
 esac
 
-read -p "Convert to YouTube Shorts? (y/n, default: n): " shorts_mode
-shorts_mode=${shorts_mode:-n}
+############################################
+# PERFORMANCE PRESET
+############################################
 
-if [[ -d "$source" ]]; then
-    base_dir="$source"
-    files=("$source"/*.{mp4,mkv,mov,avi})
-else
-    base_dir="$(dirname "$source")"
-    files=("$source")
+echo ""
+echo "Choose Performance Preset:"
+echo "1) Fast (Recommended)"
+echo "2) Balanced"
+echo "3) High Quality"
+
+read -p "Select option [1-3]: " perf
+perf=${perf:-1}
+
+case $perf in
+2)
+preset="medium"
+crf="22"
+;;
+3)
+preset="slow"
+crf="18"
+;;
+*)
+preset="veryfast"
+crf="24"
+;;
+esac
+
+############################################
+# SHORTS MODE
+############################################
+
+echo ""
+read -p "Convert to YouTube Shorts? (y/n): " shorts
+shorts=${shorts:-n}
+
+############################################
+# CENTERING OPTIONS
+############################################
+
+shift_x="(iw-1080)/2"
+
+if [[ "$shorts" == "y" ]]; then
+
+echo ""
+echo "Horizontal Centering Options:"
+echo "1) Center (Default)"
+echo "2) Shift Left"
+echo "3) Shift Right"
+echo "4) Custom Percentage"
+
+read -p "Choose option [1-4]: " center
+center=${center:-1}
+
+case $center in
+2)
+shift_x="(iw*0.15)"
+;;
+3)
+shift_x="(iw*0.35)"
+;;
+4)
+read -p "Enter horizontal shift percent (0-100): " percent
+shift_x="(iw*0.$percent)"
+;;
+*)
+shift_x="(iw-1080)/2"
+;;
+esac
+
 fi
 
-if [[ "$shorts_mode" == "y" ]]; then
-    output_dir="$base_dir/shorts"
+############################################
+# RESOLUTION
+############################################
+
+echo ""
+echo "Resolution Presets:"
+echo "1) 1080x1920 (YouTube Shorts)"
+echo "2) 720x1280"
+echo "3) Keep Original"
+
+read -p "Choose option [1-3]: " res
+res=${res:-1}
+
+case $res in
+2)
+scale="scale=720:1280"
+;;
+3)
+scale="scale=iw:ih"
+;;
+*)
+scale="scale=1080:1920"
+;;
+esac
+
+############################################
+# FILE COLLECTION
+############################################
+
+if [[ -d "$source" ]]; then
+    files=("$source"/*.{mp4,mkv,mov,avi})
+    base_dir="$source"
 else
-    output_dir="$base_dir/converted"
+    files=("$source")
+    base_dir=$(dirname "$source")
+fi
+
+############################################
+# OUTPUT DIRECTORY
+############################################
+
+if [[ "$shorts" == "y" ]]; then
+output_dir="$base_dir/shorts"
+else
+output_dir="$base_dir/converted"
 fi
 
 mkdir -p "$output_dir"
 
-total_files=0
-for f in "${files[@]}"; do
-    [[ -f "$f" ]] && ((total_files++))
+############################################
+# PROCESS FILES
+############################################
+
+count=0
+
+for file in "${files[@]}"
+do
+
+[[ ! -f "$file" ]] && continue
+
+((count++))
+
+filename=$(basename "$file")
+name="${filename%.*}"
+
+if [[ "$shorts" == "y" ]]; then
+output="$output_dir/shorts_${name}.${format}"
+else
+output="$output_dir/${name}.${format}"
+fi
+
+echo ""
+echo "[$count] ▶ Processing: $filename"
+
+if [[ "$shorts" == "y" ]]; then
+
+filter="crop=1080:1920:${shift_x}:0,$scale"
+
+ffmpeg -loglevel error \
+-i "$file" \
+-vf "$filter" \
+-c:v libx264 -preset $preset -crf $crf \
+-c:a aac -b:a 160k \
+"$output"
+
+else
+
+ffmpeg -loglevel error \
+-i "$file" \
+-c:v libx264 -preset $preset -crf $crf \
+-c:a aac -b:a 160k \
+"$output"
+
+fi
+
+echo "✓ Completed"
+
 done
 
 echo ""
-echo "Processing $total_files file(s)..."
-
-for file in "${files[@]}"; do
-
-    [[ ! -f "$file" ]] && continue
-
-    filename=$(basename "$file")
-    name="${filename%.*}"
-
-    if [[ "$shorts_mode" == "y" ]]; then
-        output="$output_dir/shorts_${name}.${format}"
-    else
-        output="$output_dir/${name}.${format}"
-    fi
-
-    echo "▶ Processing: $filename"
-
-    if [[ "$shorts_mode" == "y" ]]; then
-        filter_complex="crop=1080:1920:(iw-1080)/2:0,scale=1080:1920"
-
-        ffmpeg -nostdin -y -loglevel error \
-            -i "$file" \
-            -filter_complex "$filter_complex" \
-            -c:v libx264 -preset veryfast -crf 22 \
-            -profile:v high -level 4.2 -pix_fmt yuv420p \
-            -c:a aac -b:a 160k -ar 48000 \
-            "$output" > /dev/null 2>&1
-    else
-        ffmpeg -nostdin -y -loglevel error \
-            -i "$file" \
-            -c:v libx264 -preset veryfast -crf 22 \
-            -c:a aac -b:a 160k -ar 48000 \
-            "$output" > /dev/null 2>&1
-    fi
-
-    echo "✔ Done"
-
-done
-
-echo ""
+echo "=================================="
 echo "All files processed."
-echo "Output saved in: $output_dir"
+echo "Output saved to:"
+echo "$output_dir"
+echo ""
